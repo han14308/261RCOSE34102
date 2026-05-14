@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "elf.h"
 
+
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
@@ -319,9 +320,13 @@ copyuvm(pde_t *pgdir, uint sz)
   pte_t *pte;
   uint pa, i, flags;
   char *mem;
+  uint origflags, mapflags;
 
   if((d = setupkvm()) == 0)
     return 0;
+
+
+
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
@@ -329,13 +334,37 @@ copyuvm(pde_t *pgdir, uint sz)
       panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE);
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
-      kfree(mem);
-      goto bad;
+    
+    
+    origflags = PTE_FLAGS(*pte);
+    mapflags = origflags;
+
+    if ((origflags & PTE_W) && (origflags & PTE_U))
+        mapflags = (origflags & ~PTE_W) | PTE_COW;
+
+    mappages(d, (void*)i, PGSIZE, pa, mapflags);
+        
+    if ((origflags & PTE_W) && (origflags & PTE_U)) {
+        *pte &= ~PTE_W;
+        *pte |= PTE_COW;
     }
+
+    inc_refcount(pa);
+    
+   
+    
+    
+    //if((mem = kalloc()) == 0)
+    //  goto bad;
+    //memmove(mem, (char*)P2V(pa), PGSIZE);
+    //if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
+     // kfree(mem);
+     // goto bad;
+    }
+
+
+
+
   }
   return d;
 
