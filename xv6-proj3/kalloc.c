@@ -71,6 +71,7 @@ void
 kfree(char* v)
 {
     struct run* r;
+    uint pa;
 
     if ((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
         panic("kfree");
@@ -104,6 +105,7 @@ char*
 kalloc(void)
 {
     struct run* r;
+    uint pa;
 
     if (kmem.use_lock)
         acquire(&kmem.lock);

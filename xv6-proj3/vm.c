@@ -318,8 +318,8 @@ copyuvm(pde_t *pgdir, uint sz)
 {
   pde_t *d;
   pte_t *pte;
-  uint pa, i, flags;
-  char *mem;
+  uint pa, i;
+  
   uint origflags, mapflags;
 
   if((d = setupkvm()) == 0)
@@ -332,9 +332,7 @@ copyuvm(pde_t *pgdir, uint sz)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
-    pa = PTE_ADDR(*pte);
-    flags = PTE_FLAGS(*pte);
-    
+    pa = PTE_ADDR(*pte);    
     
     origflags = PTE_FLAGS(*pte);
     mapflags = origflags;
@@ -342,7 +340,8 @@ copyuvm(pde_t *pgdir, uint sz)
     if ((origflags & PTE_W) && (origflags & PTE_U))
         mapflags = (origflags & ~PTE_W) | PTE_COW;
 
-    mappages(d, (void*)i, PGSIZE, pa, mapflags);
+    if (mappages(d, (void*)i, PGSIZE, pa, mapflags) < 0)
+        goto bad;
         
     if ((origflags & PTE_W) && (origflags & PTE_U)) {
         *pte &= ~PTE_W;
@@ -361,11 +360,7 @@ copyuvm(pde_t *pgdir, uint sz)
      // kfree(mem);
      // goto bad;
     }
-
-
-
-
-  }
+  lcr3(V2P(pgdir));
   return d;
 
 bad:
@@ -417,14 +412,15 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 void
 page_fault(void)
 {
-  uint va = rcr2();
-  if(va < 0) {
-    panic("Invalid access");
+    uint va = rcr2();
+    if (va < 0) {
+        panic("Invalid access");
+        return;
+    }
+
     return;
-  }
-  
-  return;
 }
+
 
 //PAGEBREAK!
 // Blank page.
