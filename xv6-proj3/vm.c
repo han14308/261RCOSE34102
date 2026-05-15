@@ -412,13 +412,63 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 void
 page_fault(void)
 {
-    uint va = rcr2();
-    if (va < 0) {
-        panic("Invalid access");
+    struct proc* p = myproc();
+    pde_t* pgdir;
+    pte_t* pte;
+    uint va, pa, flags;
+    char* mem;
+
+    va = rcr2();
+
+    if (va >= KERNBASE || va >= p->sz) {
+        p->killed = 1;
         return;
     }
 
-    return;
+    va = PGROUNDDOWN(va);
+    pgdir = p->pgdir;
+    pte = walkpgdir(pgdir, (void*)va, 0);
+
+    if (pte == 0 || !(*pte & PTE_P) || !(*pte & PTE_COW)) {
+        p->killed = 1;
+        return;
+    }
+
+    pa = PTE_ADDR(*pte);
+    flags = PTE_FLAGS(*pte);
+
+    if (get_refcount(pa) > 1) {
+        mem = kalloc();
+
+        if (mem == 0) {
+            p->killed = 1;
+            return;
+        }
+
+        memmove(mem, (char*)P2V(pa), PGSIZE);
+        kfree((char*)P2V(pa));
+        *pte = V2P(mem) | ((flags & ~PTE_COW) | PTE_W);
+    }
+
+    else if (get_refcount(pa) == 1) {
+        *pte = pa | ((flags & ~PTE_COW) | PTE_W);
+    }
+
+    else {
+        p->killed = 1;
+        return;
+    }
+
+    lcr3(V2P(pgdir));
+
+
+    //uint va = rcr2();
+    //if (va < 0) {
+     //   panic("Invalid access");
+    //    return;
+   // }
+
+    //return;
 }
 
 
